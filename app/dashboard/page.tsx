@@ -9,7 +9,23 @@ import { HARDCODED_USER_ID } from "@/lib/utils/constants";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
-  const stories = await getStories(HARDCODED_USER_ID);
+  let stories;
+  try {
+    stories = await getStories(HARDCODED_USER_ID);
+  } catch (err) {
+    console.error("[DashboardPage] Failed to load stories:", err);
+    const message =
+      err instanceof Error ? err.message : "Unknown error loading stories";
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 text-center">
+        <h2 className="text-base font-semibold">Unable to load stories</h2>
+        <p className="max-w-md text-sm text-muted-foreground">{message}</p>
+        <Button asChild variant="outline">
+          <Link href="/dashboard/create">Create a new story instead</Link>
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <div>
