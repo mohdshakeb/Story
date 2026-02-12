@@ -16,6 +16,11 @@ import {
  * Returns: { url: string, path: string }
  */
 export async function POST(request: NextRequest) {
+  const token = request.headers.get("x-upload-token");
+  if (!token || token !== process.env.NEXT_PUBLIC_UPLOAD_SECRET_TOKEN) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();

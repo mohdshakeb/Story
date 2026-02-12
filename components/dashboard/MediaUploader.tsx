@@ -48,7 +48,7 @@ export function MediaUploader({
   const maxSize = isImage ? MAX_IMAGE_SIZE : MAX_AUDIO_SIZE;
   const acceptedTypes = isImage ? ACCEPTED_IMAGE_TYPES : ACCEPTED_AUDIO_TYPES;
   const acceptString = acceptedTypes.join(",");
-  const maxSizeLabel = isImage ? "5MB" : "10MB";
+  const maxSizeLabel = isImage ? "5MB" : "25MB";
   const typeLabel = isImage ? "image" : "audio file";
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -83,7 +83,13 @@ export function MediaUploader({
 
     try {
       const endpoint = isImage ? "/api/upload/image" : "/api/upload/audio";
-      const res = await fetch(endpoint, { method: "POST", body: formData });
+      const res = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+        headers: {
+          "x-upload-token": process.env.NEXT_PUBLIC_UPLOAD_SECRET_TOKEN ?? "",
+        },
+      });
       const data = await res.json();
 
       if (!res.ok) {

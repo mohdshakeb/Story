@@ -105,7 +105,8 @@ function MultipleChoiceEditor({ config, onChange, errors }: SubEditorProps) {
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="mc-question">
-          Question <span className="text-destructive">*</span>
+          Question{" "}
+          <span className="text-muted-foreground font-normal text-xs">(optional)</span>
         </Label>
         <Input
           id="mc-question"
@@ -199,7 +200,8 @@ function TextInputEditor({ config, onChange, errors }: SubEditorProps) {
     <div className="space-y-4">
       <div className="space-y-2">
         <Label htmlFor="ti-prompt">
-          Prompt <span className="text-destructive">*</span>
+          Prompt{" "}
+          <span className="text-muted-foreground font-normal text-xs">(optional)</span>
         </Label>
         <Input
           id="ti-prompt"

@@ -15,6 +15,11 @@ import {
  * Returns: { url: string, path: string }
  */
 export async function POST(request: NextRequest) {
+  const token = request.headers.get("x-upload-token");
+  if (!token || token !== process.env.NEXT_PUBLIC_UPLOAD_SECRET_TOKEN) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   let formData: FormData;
   try {
     formData = await request.formData();
@@ -41,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   if (file.size > MAX_AUDIO_SIZE) {
     return NextResponse.json(
-      { error: "File too large. Maximum 10MB." },
+      { error: "File too large. Maximum 25MB." },
       { status: 400 }
     );
   }

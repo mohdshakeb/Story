@@ -3,7 +3,7 @@ import { z } from "zod";
 // ─── Prompt Config Schemas ───────────────────────────────────────────────────
 
 export const MultipleChoiceConfigSchema = z.object({
-  question: z.string().min(1, "Question is required"),
+  question: z.string().default(""),
   options: z
     .array(z.string().min(1, "Option cannot be empty"))
     .min(2, "At least 2 options required")
@@ -12,7 +12,7 @@ export const MultipleChoiceConfigSchema = z.object({
 });
 
 export const TextInputConfigSchema = z.object({
-  prompt: z.string().min(1, "Prompt is required"),
+  prompt: z.string().default(""),
   placeholder: z.string().default(""),
   max_length: z.coerce.number().int().min(3).max(200).default(50),
   integration_template: z.string().default(""),
@@ -33,11 +33,13 @@ export const ImageRevealConfigSchema = z.object({
 export const CreateStorySchema = z.object({
   title: z
     .string()
+    .trim()
     .min(1, "Title is required")
     .max(100, "Title must be under 100 characters"),
   occasion: z.string().optional(),
   recipient_name: z
     .string()
+    .trim()
     .max(50, "Name must be under 50 characters")
     .optional(),
 });
@@ -45,12 +47,14 @@ export const CreateStorySchema = z.object({
 export const UpdateStorySchema = z.object({
   title: z
     .string()
+    .trim()
     .min(1, "Title is required")
     .max(100, "Title must be under 100 characters")
     .optional(),
-  occasion: z.string().nullable().optional(),
+  occasion: z.string().optional(),
   recipient_name: z
     .string()
+    .trim()
     .max(50, "Name must be under 50 characters")
     .nullable()
     .optional(),
