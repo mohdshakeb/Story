@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/dashboard/EmptyState";
 import { getStories } from "@/lib/data/queries";
 import { HARDCODED_USER_ID } from "@/lib/utils/constants";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
   const stories = await getStories(HARDCODED_USER_ID);
 
