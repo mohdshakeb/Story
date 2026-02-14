@@ -19,8 +19,7 @@ export function MultipleChoicePrompt({
   const handleSelect = (option: string) => {
     if (selected) return; // lock after first choice
     setSelected(option);
-    // Brief delay so the selection highlights before advancing
-    setTimeout(() => onAnswer(option), 600);
+    onAnswer(option);
   };
 
   return (

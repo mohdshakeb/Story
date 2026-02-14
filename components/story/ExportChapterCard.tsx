@@ -26,23 +26,20 @@ const COLORS = {
   border: "#E8DDD0",
   primary: "#FB7185",
   accent: "#D4A054",
+  viewerVoice: "#7A7068", // Subtle warm gray — the reader's voice
 };
 
-/** Returns integration text with answer substituted, or raw answer */
+/** Returns integration text with answer substituted, or raw answer.
+ *  text_input always returns raw answer (no template). */
 function getRenderedIntegration(chapter: Chapter, answer: string): string {
-  if (
-    chapter.prompt_type !== "multiple_choice" &&
-    chapter.prompt_type !== "text_input"
-  )
-    return answer;
+  if (chapter.prompt_type === "text_input") return answer;
+  if (chapter.prompt_type !== "multiple_choice") return answer;
 
   const cfg = chapter.prompt_config as { integration_template?: string } | null;
   const tmpl = cfg?.integration_template?.trim() ?? "";
   if (!tmpl) return answer;
 
-  const placeholder =
-    chapter.prompt_type === "multiple_choice" ? "[choice]" : "[response]";
-  return tmpl.replace(placeholder, answer);
+  return tmpl.replace("[choice]", answer);
 }
 
 /**
@@ -111,31 +108,24 @@ export const ExportChapterCard = forwardRef<
           {chapter.paragraph_text}
         </p>
 
-        {/* Integration text (answer woven in) */}
+        {/* Viewer's answer in viewer-voice styling */}
         {integration && (
-          <div
+          <p
             style={{
-              borderLeft: `3px solid ${COLORS.primary}40`,
-              paddingLeft: 24,
+              fontSize: isCompact ? 26 : 30,
+              lineHeight: 1.6,
+              fontStyle: "italic",
+              color: COLORS.viewerVoice,
+              margin: 0,
               marginTop: isCompact ? 16 : 24,
+              display: "-webkit-box",
+              WebkitLineClamp: isCompact ? 3 : 5,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
             }}
           >
-            <p
-              style={{
-                fontSize: isCompact ? 26 : 30,
-                lineHeight: 1.6,
-                fontStyle: "italic",
-                color: `${COLORS.foreground}CC`,
-                margin: 0,
-                display: "-webkit-box",
-                WebkitLineClamp: isCompact ? 3 : 5,
-                WebkitBoxOrient: "vertical",
-                overflow: "hidden",
-              }}
-            >
-              {integration}
-            </p>
-          </div>
+            {integration}
+          </p>
         )}
       </div>
 

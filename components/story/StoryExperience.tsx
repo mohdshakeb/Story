@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { ChevronDown } from "lucide-react";
 import { StoryLanding } from "./StoryLanding";
 import { ParagraphDisplay } from "./ParagraphDisplay";
-import { IntegrationText } from "./IntegrationText";
+import { ViewerVoiceText } from "./ViewerVoiceText";
 import { PromptInteraction } from "./PromptInteraction";
 import { ChapterImage } from "./ChapterImage";
 import { FinalMessage } from "./FinalMessage";
@@ -60,8 +60,14 @@ function clearProgress(storyId: string) {
   }
 }
 
-/** Returns the integration text for a chapter, or the raw answer as fallback */
-function getIntegration(chapter: Chapter, state: ChapterState): string | null {
+interface IntegrationResult {
+  text: string;
+  hasTemplate: boolean;
+  answer: string;
+}
+
+/** Returns structured integration data for the viewer's answer display */
+function getIntegration(chapter: Chapter, state: ChapterState): IntegrationResult | null {
   if (
     state.step !== "revealed" ||
     !state.answer ||
@@ -69,11 +75,23 @@ function getIntegration(chapter: Chapter, state: ChapterState): string | null {
       chapter.prompt_type !== "text_input")
   )
     return null;
+
+  // text_input: always raw answer, no template
+  if (chapter.prompt_type === "text_input") {
+    return { text: state.answer, hasTemplate: false, answer: state.answer };
+  }
+
+  // multiple_choice: check for integration_template
   const cfg = chapter.prompt_config as
     | { integration_template?: string }
     | null;
   const tmpl = cfg?.integration_template?.trim() ?? "";
-  return tmpl || state.answer;
+
+  if (tmpl) {
+    const rendered = tmpl.replace("[choice]", state.answer);
+    return { text: rendered, hasTemplate: true, answer: state.answer };
+  }
+  return { text: state.answer, hasTemplate: false, answer: state.answer };
 }
 
 /** Whether a chapter type needs a manual chapter-level chevron to advance.
@@ -82,8 +100,52 @@ function needsChevron(chapter: Chapter): boolean {
   return chapter.prompt_type === "none";
 }
 
-// Delay (ms) after mc/text_input reveal sequence before auto-advancing
-const AUTO_ADVANCE_DELAY = 2000;
+// Delay (ms) after answer before auto-advancing to next chapter
+const AUTO_ADVANCE_DELAY = 800;
+
+// ─── Scroll utility ───────────────────────────────────────────────────────────
+
+function smoothScrollToCenter(
+  container: HTMLElement,
+  target: HTMLElement,
+  duration: number,
+  rafRef: { current: number | null }
+) {
+  if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+
+  const containerRect = container.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
+  const scrollDelta =
+    targetRect.top - containerRect.top +
+    targetRect.height / 2 -
+    containerRect.height / 2;
+
+  const startScroll = container.scrollTop;
+  const startTime = performance.now();
+
+  // Disable scroll-snap during animation to prevent the browser's snap engine
+  // from jerking to the nearest snap point when our RAF loop ends
+  container.style.scrollSnapType = "none";
+
+  function easeInOutCubic(t: number): number {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function tick(now: number) {
+    const elapsed = now - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    container.scrollTop = startScroll + scrollDelta * easeInOutCubic(progress);
+    if (progress < 1) {
+      rafRef.current = requestAnimationFrame(tick);
+    } else {
+      rafRef.current = null;
+      // Re-enable scroll-snap (clears inline override, CSS class takes effect)
+      container.style.scrollSnapType = "";
+    }
+  }
+
+  rafRef.current = requestAnimationFrame(tick);
+}
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
@@ -115,6 +177,8 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
   const finalRef = useRef<HTMLDivElement>(null);
   const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevRevealedRef = useRef(1);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollRafRef = useRef<number | null>(null);
 
   // ── Cleanup advance timer on unmount ────────────────────────────────────────
   useEffect(() => {
@@ -203,7 +267,8 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
     // Delay slightly so the entrance animation has started (element is in DOM
     // at full height) before scrollIntoView calculates the position
     const timer = setTimeout(() => {
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      const container = scrollContainerRef.current;
+      if (container) smoothScrollToCenter(container, target, 700, scrollRafRef);
     }, 50);
     return () => clearTimeout(timer);
   }, [revealedCount, phase, chapters.length]);
@@ -229,33 +294,20 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
       }));
       saveProgress(story.id, { chapterIndex: chapterIdx, answers: newAnswers });
 
-      // Auto-advance after answer (mc, text_input, audio, image_reveal)
-      if (
+      // text_input: advance immediately — the chevron is purely navigational,
+      // so scroll starts before the chevron exit animation completes (~300ms),
+      // making the height change invisible since the viewport has scrolled away.
+      if (chapter.prompt_type === "text_input") {
+        advanceToNext();
+      } else if (
         chapter.prompt_type === "multiple_choice" ||
-        chapter.prompt_type === "text_input" ||
-        chapter.prompt_type === "audio_playback"
+        chapter.prompt_type === "audio_playback" ||
+        chapter.prompt_type === "image_reveal"
       ) {
         advanceTimerRef.current = setTimeout(advanceToNext, AUTO_ADVANCE_DELAY);
       }
-      if (chapter.prompt_type === "image_reveal") {
-        // onAnswer fires 1.2s after tap (image fade-in) → advance 1.5s later
-        advanceTimerRef.current = setTimeout(advanceToNext, 1500);
-      }
     },
     [answers, story.id, advanceToNext]
-  );
-
-  // Re-center the current chapter after its content grows (integration text, image)
-  const handleRevealAnimationComplete = useCallback(
-    (chapterIdx: number) => {
-      if (chapterIdx === revealedCount - 1) {
-        chapterRefs.current[chapterIdx]?.scrollIntoView({
-          behavior: "smooth",
-          block: "center",
-        });
-      }
-    },
-    [revealedCount]
   );
 
   // ── Save / Reset handlers ──────────────────────────────────────────────────
@@ -293,7 +345,8 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
 
   return (
     <div
-      className="scroll-snap-y-proximity h-screen overflow-y-auto bg-background pb-[30vh]"
+      ref={scrollContainerRef}
+      className="scroll-snap-y-proximity h-screen overflow-y-auto bg-background pt-[30vh] pb-[30vh]"
     >
       {chapters.slice(0, revealedCount).map((chapter, idx) => {
         const state = chapterStates[idx] ?? {
@@ -316,7 +369,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
             ref={(el) => {
               chapterRefs.current[idx] = el;
             }}
-            className={`scroll-snap-align-center mx-auto max-w-sm px-5 ${idx === 0 ? "pt-16" : ""}`}
+            className="scroll-snap-align-center mx-auto max-w-sm px-5"
           >
             {/* ── Chapter divider (between chapters) ──────────── */}
             {idx > 0 && (
@@ -339,66 +392,88 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                 {chapter.title?.trim() || `Chapter ${idx + 1}`}
               </p>
 
-              {/* Paragraph */}
-              <ParagraphDisplay text={chapter.paragraph_text} />
+              {/* Paragraph — with inline append for MC-no-template */}
+              <ParagraphDisplay
+                text={chapter.paragraph_text}
+                inlineAppend={
+                  state.step === "revealed" &&
+                  integration !== null &&
+                  !integration.hasTemplate &&
+                  chapter.prompt_type === "multiple_choice"
+                    ? { text: integration.answer }
+                    : undefined
+                }
+              />
 
               {/* Prompt interaction — shown in "prompt" state for all types,
-                  AND in "revealed" state for audio_playback so the player
-                  stays mounted and audio keeps playing in the background */}
-              {!isSaved && !isNoneType &&
-                (state.step === "prompt" ||
-                  chapter.prompt_type === "audio_playback") && (
-                <PromptInteraction
-                  chapter={chapter}
-                  onAnswer={(answer) =>
-                    handlePromptAnswer(idx, chapter, answer)
-                  }
-                />
-              )}
+                  AND in "revealed" state for audio_playback/text_input so
+                  they stay mounted. No layout animation — AnimatePresence
+                  handles opacity transitions; height changes are instant. */}
+              <div>
+                <AnimatePresence>
+                  {!isSaved && !isNoneType &&
+                    (state.step === "prompt" ||
+                      chapter.prompt_type === "audio_playback" ||
+                      chapter.prompt_type === "text_input") && (
+                    <motion.div
+                      key="prompt"
+                      exit={
+                        chapter.prompt_type === "multiple_choice"
+                          ? {
+                              opacity: 0,
+                              height: 0,
+                              overflow: "hidden",
+                              transition: { duration: 0.35, ease: "easeInOut" },
+                            }
+                          : chapter.prompt_type !== "audio_playback" &&
+                              chapter.prompt_type !== "text_input"
+                            ? { opacity: 0, transition: { duration: 0.2 } }
+                            : {}
+                      }
+                    >
+                      <PromptInteraction
+                        chapter={chapter}
+                        onAnswer={(answer) =>
+                          handlePromptAnswer(idx, chapter, answer)
+                        }
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
-              {/* Revealed image for image_reveal prompts (stays visible after answering) */}
-              {state.step === "revealed" &&
-                chapter.prompt_type === "image_reveal" &&
-                chapter.prompt_config && (
-                  <img
-                    src={
-                      (chapter.prompt_config as { image_url?: string })
-                        .image_url ?? ""
-                    }
-                    alt=""
-                    className="w-full rounded-2xl object-cover"
-                  />
-                )}
-
-              {/* Integration text (revealed step) */}
-              {state.step === "revealed" &&
-                integration &&
-                state.answer &&
-                (chapter.prompt_type === "multiple_choice" ||
-                  chapter.prompt_type === "text_input") && (
-                  <motion.div
-                    onAnimationComplete={() =>
-                      handleRevealAnimationComplete(idx)
-                    }
-                  >
-                    <IntegrationText
-                      template={integration}
-                      answer={state.answer}
-                      promptType={chapter.prompt_type}
+                {/* Revealed image for image_reveal prompts (stays visible after answering) */}
+                {state.step === "revealed" &&
+                  chapter.prompt_type === "image_reveal" &&
+                  chapter.prompt_config && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={
+                        (chapter.prompt_config as { image_url?: string })
+                          .image_url ?? ""
+                      }
+                      alt=""
+                      className="w-full rounded-2xl object-cover"
                     />
-                  </motion.div>
-                )}
+                  )}
+
+                {/* text_input answer: stays visible in the mounted TextInputPrompt above */}
+
+                {/* MC + template: sentence with highlighted choice */}
+                {state.step === "revealed" &&
+                  integration?.hasTemplate === true &&
+                  chapter.prompt_type === "multiple_choice" && (
+                    <ViewerVoiceText
+                      text={integration.text}
+                      highlightSubstring={integration.answer}
+                    />
+                  )}
+                {/* MC no template: handled inline by ParagraphDisplay above */}
+              </div>
 
               {/* Chapter image (revealed step, or always if no prompt) */}
               {(state.step === "revealed" || isNoneType) &&
                 chapter.image_url && (
-                  <motion.div
-                    onAnimationComplete={() =>
-                      handleRevealAnimationComplete(idx)
-                    }
-                  >
-                    <ChapterImage url={chapter.image_url} />
-                  </motion.div>
+                  <ChapterImage url={chapter.image_url} />
                 )}
 
               {/* Down-arrow chevron for none/audio/image types */}
