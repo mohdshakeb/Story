@@ -232,7 +232,7 @@ function TextInputEditor({ config, onChange, errors }: SubEditorProps) {
           id="ti-maxlength"
           type="number"
           min={3}
-          max={200}
+          max={500}
           value={maxLength}
           onChange={(e) => updateField("max_length", parseInt(e.target.value, 10) || 50)}
         />

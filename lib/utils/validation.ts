@@ -14,7 +14,7 @@ export const MultipleChoiceConfigSchema = z.object({
 export const TextInputConfigSchema = z.object({
   prompt: z.string().default(""),
   placeholder: z.string().default(""),
-  max_length: z.coerce.number().int().min(3).max(200).default(50),
+  max_length: z.coerce.number().int().min(3).max(500).default(50),
   integration_template: z.string().default(""),
 });
 
