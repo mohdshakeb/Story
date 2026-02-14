@@ -49,6 +49,7 @@ export interface Story {
   title: string;
   slug: string | null;
   occasion: string | null;
+  anniversary_number: number | null;
   recipient_name: string | null;
   final_message_type: FinalMessageType | null;
   final_message_content: string | null;
@@ -78,12 +79,14 @@ export interface Chapter {
 export interface CreateStoryInput {
   title: string;
   occasion?: string;
+  anniversary_number?: number;
   recipient_name?: string;
 }
 
 export interface UpdateStoryInput {
   title?: string;
   occasion?: string | null;
+  anniversary_number?: number | null;
   recipient_name?: string | null;
   final_message_type?: FinalMessageType | null;
   final_message_content?: string | null;
@@ -112,14 +115,15 @@ export interface UpdateChapterInput {
 /** Story with a precomputed chapter count — used for the dashboard list view. */
 export interface StoryWithCount extends Omit<Story, "chapters"> {
   chapter_count: number;
+  is_completed?: boolean;
 }
 
-// ─── Response tracking (for future analytics) ────────────────────────────────
+// ─── Story Completion ────────────────────────────────────────────────────────
 
-export interface ChapterResponse {
+/** Recipient's saved completion — one per story, upserted on re-save. */
+export interface StoryCompletion {
   id: string;
   story_id: string;
-  chapter_id: string;
-  response_data: string;
-  timestamp: string;
+  answers: Record<string, string>;
+  completed_at: string;
 }

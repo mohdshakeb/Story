@@ -37,6 +37,7 @@ export const CreateStorySchema = z.object({
     .min(1, "Title is required")
     .max(100, "Title must be under 100 characters"),
   occasion: z.string().optional(),
+  anniversary_number: z.number().int().min(1).max(200).optional(),
   recipient_name: z
     .string()
     .trim()
@@ -52,6 +53,7 @@ export const UpdateStorySchema = z.object({
     .max(100, "Title must be under 100 characters")
     .optional(),
   occasion: z.string().optional(),
+  anniversary_number: z.number().int().min(1).max(200).nullable().optional(),
   recipient_name: z
     .string()
     .trim()

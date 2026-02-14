@@ -98,8 +98,12 @@ Client Component → Server Action (/actions/*) → lib/data/storage.ts → Supa
 
 /components/dashboard/*          → Creator-facing components
 /components/story/*              → Recipient-facing components
+/components/story/StoryExport.tsx → Export UI (format toggle + image generation)
+/components/story/ExportChapterCard.tsx → Fixed-size card template for image export
 /components/ui/*                 → shadcn/ui components
 /components/shared/*             → Shared across both surfaces
+
+/docs/plans/*                    → Design documents for features
 ```
 
 ### Prompt types
@@ -118,9 +122,46 @@ Buckets are public-read / authenticated-write.
 
 ### Recipient experience flow
 
-Landing → Begin → Chapter (paragraph → prompt interaction → chapter image reveal → Continue) × N → Final Message
+**Continuous scroll model** — chapters stack vertically in a single scrollable container with CSS `scroll-snap-type: y proximity`. New chapters appear below as the recipient interacts:
+- `multiple_choice`/`text_input`: auto-advance after answer → integration text reveal → 2s delay → next chapter
+- `audio_playback`/`image_reveal`/`none`: bouncing down-chevron button to advance
+- No progress indicator — the scroll is the progress
+- Thin divider lines between chapters (animated scaleX)
+- Landing page stays as a separate full-screen phase
+- Final message is the last item in the scroll (with slower stagger animation)
 
-Maximum 10 chapters per story. Session progress tracked via `sessionStorage` (client-side, no DB writes in Phase 1).
+```
+Landing → Begin → Chapters (continuous scroll, interact to reveal next) → Final Message
+                                                                              ↓
+                                                                    "Save My Story" + "Reset"
+                                                                              ↓ (after save)
+                                                                    Completed view + Export
+```
+
+Maximum 10 chapters per story.
+
+### Story completion & persistence
+
+- **In-progress:** saved to `localStorage` (survives tab close, keyed by `ourstory-{storyId}`)
+- **On completion:** recipient sees "Save My Story" + "Reset" buttons below final message
+- **"Save My Story":** syncs answers to `story_completions` table in Supabase. "Reset" disappears. Export becomes available.
+- **"Reset":** clears `localStorage`, returns to landing. No DB record created.
+- **Completed view:** all chapters rendered read-only with answers woven in. Export option available.
+- **Page load priority:** localStorage.saved → localStorage.inProgress → DB completion → landing page
+
+### Story completion data model
+
+`story_completions` table: `id`, `story_id` (unique FK), `answers` (JSONB — `Record<chapterId, answer>`), `completed_at`.
+One completion per story (Phase 1). Upsert on re-save. Creator sees "Completed" badge on dashboard.
+
+### Story export
+
+Recipients can export completed stories as images for social media:
+- Format options: 9:16 (Instagram Story) and 1:1 (Square)
+- Each chapter becomes one image card: title + paragraph + integration text + chapter image
+- Uses `html-to-image` for client-side capture
+- Web Share API on mobile, download on desktop
+- Components: `StoryExport.tsx` (sheet UI) + `ExportChapterCard.tsx` (card template)
 
 ## Phase 2 expansion notes
 

@@ -3,7 +3,7 @@
  * Uses the service role client to bypass RLS in Phase 1.
  */
 import { createServiceClient } from "@/lib/supabase/service";
-import type { Story, StoryWithCount, Chapter } from "@/lib/types/story";
+import type { Story, StoryWithCount, StoryCompletion, Chapter } from "@/lib/types/story";
 
 // ─── Story Queries ─────────────────────────────────────────────────────────
 
@@ -11,20 +11,21 @@ export async function getStories(userId: string): Promise<StoryWithCount[]> {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from("stories")
-    .select("*, chapters(count)")
+    .select("*, chapters(count), story_completions(id)")
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
 
-  // Supabase returns chapters(count) as [{ count: number }] — normalize to chapter_count
   return (data ?? []).map((row) => {
-    const { chapters, ...story } = row as Story & {
+    const { chapters, story_completions, ...story } = row as Story & {
       chapters: Array<{ count: number }>;
+      story_completions: Array<{ id: string }>;
     };
     return {
       ...story,
       chapter_count: chapters?.[0]?.count ?? 0,
+      is_completed: (story_completions?.length ?? 0) > 0,
     } as StoryWithCount;
   });
 }
@@ -71,6 +72,47 @@ export async function slugExists(slug: string): Promise<boolean> {
     .maybeSingle();
 
   return data !== null;
+}
+
+// ─── Completion Queries ──────────────────────────────────────────────────────
+
+export async function getStoryCompletion(
+  storyId: string
+): Promise<StoryCompletion | null> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("story_completions")
+    .select("*")
+    .eq("story_id", storyId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data as StoryCompletion | null;
+}
+
+export async function getStoryCompletionBySlug(
+  slug: string
+): Promise<StoryCompletion | null> {
+  const supabase = createServiceClient();
+
+  // Look up story_id from slug first, then fetch completion
+  const { data: story } = await supabase
+    .from("stories")
+    .select("id")
+    .eq("slug", slug)
+    .eq("published", true)
+    .maybeSingle();
+
+  if (!story) return null;
+
+  const { data, error } = await supabase
+    .from("story_completions")
+    .select("*")
+    .eq("story_id", story.id)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return data as StoryCompletion | null;
 }
 
 // ─── Chapter Queries ────────────────────────────────────────────────────────

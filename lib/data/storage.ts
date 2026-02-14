@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import type {
   Story,
   Chapter,
+  StoryCompletion,
   CreateStoryInput,
   UpdateStoryInput,
   CreateChapterInput,
@@ -25,6 +26,7 @@ export async function createStory(input: CreateStoryInput): Promise<Story> {
       user_id: HARDCODED_USER_ID,
       title: input.title,
       occasion: input.occasion ?? null,
+      anniversary_number: input.anniversary_number ?? null,
       recipient_name: input.recipient_name ?? null,
       published: false,
     })
@@ -133,6 +135,30 @@ export async function deleteChapter(id: string): Promise<void> {
   const supabase = createServiceClient();
   const { error } = await supabase.from("chapters").delete().eq("id", id);
   if (error) throw new Error(error.message);
+}
+
+// ─── Story Completion Operations ──────────────────────────────────────────────
+
+export async function saveStoryCompletion(
+  storyId: string,
+  answers: Record<string, string>
+): Promise<StoryCompletion> {
+  const supabase = createServiceClient();
+  const { data, error } = await supabase
+    .from("story_completions")
+    .upsert(
+      {
+        story_id: storyId,
+        answers,
+        completed_at: new Date().toISOString(),
+      },
+      { onConflict: "story_id" }
+    )
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data as StoryCompletion;
 }
 
 // ─── Media Storage Operations ─────────────────────────────────────────────────

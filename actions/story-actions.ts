@@ -8,6 +8,7 @@ import {
   deleteStory as dbDelete,
   publishStory as dbPublish,
   unpublishStory as dbUnpublish,
+  saveStoryCompletion as dbSaveCompletion,
 } from "@/lib/data/storage";
 import { getStory } from "@/lib/data/queries";
 import {
@@ -16,7 +17,7 @@ import {
   FinalMessageSchema,
 } from "@/lib/utils/validation";
 import type { ActionResult } from "@/lib/types/actions";
-import type { Story } from "@/lib/types/story";
+import type { Story, StoryCompletion } from "@/lib/types/story";
 
 // ─── Create ───────────────────────────────────────────────────────────────────
 
@@ -179,6 +180,32 @@ export async function unpublishStoryAction(
     return {
       success: false,
       error: e instanceof Error ? e.message : "Failed to unpublish story",
+    };
+  }
+}
+
+// ─── Save Completion ─────────────────────────────────────────────────────────
+
+export async function saveStoryCompletionAction(
+  storyId: string,
+  answers: Record<string, string>
+): Promise<ActionResult<StoryCompletion>> {
+  const story = await getStory(storyId);
+  if (!story) {
+    return { success: false, error: "Story not found" };
+  }
+  if (!story.published) {
+    return { success: false, error: "Story is not published" };
+  }
+
+  try {
+    const completion = await dbSaveCompletion(storyId, answers);
+    revalidatePath("/dashboard");
+    return { success: true, data: completion };
+  } catch (e) {
+    return {
+      success: false,
+      error: e instanceof Error ? e.message : "Failed to save story completion",
     };
   }
 }

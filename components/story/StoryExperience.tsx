@@ -1,20 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "motion/react";
+import { ChevronDown } from "lucide-react";
 import { StoryLanding } from "./StoryLanding";
 import { ParagraphDisplay } from "./ParagraphDisplay";
 import { IntegrationText } from "./IntegrationText";
 import { PromptInteraction } from "./PromptInteraction";
 import { ChapterImage } from "./ChapterImage";
-import { ContinueButton } from "./ContinueButton";
-import { ProgressIndicator } from "./ProgressIndicator";
 import { FinalMessage } from "./FinalMessage";
-import type { Story, Chapter } from "@/lib/types/story";
+import { StoryExport } from "./StoryExport";
+import { saveStoryCompletionAction } from "@/actions/story-actions";
+import type { Story, Chapter, StoryCompletion } from "@/lib/types/story";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Phase = "landing" | "story" | "final";
+type Phase = "landing" | "story";
 type ChapterStep = "prompt" | "revealed";
 
 interface ChapterState {
@@ -25,6 +26,7 @@ interface ChapterState {
 interface SavedProgress {
   chapterIndex: number;
   answers: Record<string, string>;
+  saved?: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -35,15 +37,15 @@ function storageKey(storyId: string) {
 
 function saveProgress(storyId: string, data: SavedProgress) {
   try {
-    sessionStorage.setItem(storageKey(storyId), JSON.stringify(data));
+    localStorage.setItem(storageKey(storyId), JSON.stringify(data));
   } catch {
-    // sessionStorage unavailable (private browsing edge cases) — fail silently
+    // localStorage unavailable (private browsing edge cases) — fail silently
   }
 }
 
 function loadProgress(storyId: string): SavedProgress | null {
   try {
-    const raw = sessionStorage.getItem(storageKey(storyId));
+    const raw = localStorage.getItem(storageKey(storyId));
     return raw ? (JSON.parse(raw) as SavedProgress) : null;
   } catch {
     return null;
@@ -52,174 +54,449 @@ function loadProgress(storyId: string): SavedProgress | null {
 
 function clearProgress(storyId: string) {
   try {
-    sessionStorage.removeItem(storageKey(storyId));
+    localStorage.removeItem(storageKey(storyId));
   } catch {
     // ignore
   }
 }
 
-function hasIntegration(chapter: Chapter): boolean {
+/** Returns the integration text for a chapter, or the raw answer as fallback */
+function getIntegration(chapter: Chapter, state: ChapterState): string | null {
   if (
-    chapter.prompt_type !== "multiple_choice" &&
-    chapter.prompt_type !== "text_input"
+    state.step !== "revealed" ||
+    !state.answer ||
+    (chapter.prompt_type !== "multiple_choice" &&
+      chapter.prompt_type !== "text_input")
   )
-    return false;
+    return null;
   const cfg = chapter.prompt_config as
     | { integration_template?: string }
     | null;
-  return !!cfg?.integration_template?.trim();
+  const tmpl = cfg?.integration_template?.trim() ?? "";
+  return tmpl || state.answer;
 }
+
+/** Whether a chapter type needs a manual chapter-level chevron to advance.
+ * Only "none" — all other types have their own advance mechanism. */
+function needsChevron(chapter: Chapter): boolean {
+  return chapter.prompt_type === "none";
+}
+
+// Delay (ms) after mc/text_input reveal sequence before auto-advancing
+const AUTO_ADVANCE_DELAY = 2000;
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
 interface StoryExperienceProps {
   story: Story;
+  completion?: StoryCompletion | null;
 }
 
-export function StoryExperience({ story }: StoryExperienceProps) {
-  const chapters: Chapter[] = story.chapters ?? [];
+export function StoryExperience({ story, completion }: StoryExperienceProps) {
+  const chapters: Chapter[] = useMemo(
+    () => story.chapters ?? [],
+    [story.chapters]
+  );
 
   // ── State ──────────────────────────────────────────────────────────────────
   const [phase, setPhase] = useState<Phase>("landing");
-  const [chapterIndex, setChapterIndex] = useState(0);
+  const [revealedCount, setRevealedCount] = useState(1);
   const [chapterStates, setChapterStates] = useState<
     Record<number, ChapterState>
   >({});
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [isSaved, setIsSaved] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isRestored, setIsRestored] = useState(false);
+  const [showExport, setShowExport] = useState(false);
 
-  // ── Restore sessionStorage progress ───────────────────────────────────────
+  // ── Refs ────────────────────────────────────────────────────────────────────
+  const chapterRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const finalRef = useRef<HTMLDivElement>(null);
+  const advanceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevRevealedRef = useRef(1);
+
+  // ── Cleanup advance timer on unmount ────────────────────────────────────────
   useEffect(() => {
-    const saved = loadProgress(story.id);
-    if (saved && saved.chapterIndex > 0) {
-      setPhase("story");
-      setChapterIndex(Math.min(saved.chapterIndex, chapters.length - 1));
-      setAnswers(saved.answers ?? {});
-    }
-  }, [story.id, chapters.length]);
+    return () => {
+      if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
+    };
+  }, []);
 
-  // ── Derived ────────────────────────────────────────────────────────────────
-  const chapter = chapters[chapterIndex];
-  const state = chapterStates[chapterIndex] ?? {
-    step: "prompt" as ChapterStep,
-    answer: null,
-  };
-  const isNoneType = chapter?.prompt_type === "none";
+  // ── Restore progress (priority: localStorage.saved → inProgress → DB → landing)
+  useEffect(() => {
+    const local = loadProgress(story.id);
+
+    // Helper: set all chapters to revealed with given answers
+    const restoreCompleted = (ans: Record<string, string>) => {
+      setPhase("story");
+      const count = chapters.length + 1; // +1 to show final message
+      setRevealedCount(count);
+      prevRevealedRef.current = count;
+      const states: Record<number, ChapterState> = {};
+      for (let i = 0; i < chapters.length; i++) {
+        states[i] = { step: "revealed", answer: ans[chapters[i]?.id] ?? null };
+      }
+      setChapterStates(states);
+      setAnswers(ans);
+      setIsSaved(true);
+    };
+
+    if (local?.saved) {
+      // 1. Saved locally — show completed view
+      restoreCompleted(local.answers ?? {});
+    } else if (local && local.chapterIndex > 0) {
+      // 2. In-progress — restore to saved chapter
+      setPhase("story");
+      const restoreIdx = Math.min(local.chapterIndex, chapters.length - 1);
+      setRevealedCount(restoreIdx + 1);
+      prevRevealedRef.current = restoreIdx + 1;
+
+      const restoredStates: Record<number, ChapterState> = {};
+      for (let i = 0; i <= restoreIdx; i++) {
+        restoredStates[i] = {
+          step: "revealed",
+          answer: local.answers?.[chapters[i]?.id] ?? null,
+        };
+      }
+      if (!local.answers?.[chapters[restoreIdx]?.id]) {
+        restoredStates[restoreIdx] = { step: "prompt", answer: null };
+      }
+      setChapterStates(restoredStates);
+      setAnswers(local.answers ?? {});
+      setIsRestored(true);
+    } else if (completion) {
+      // 3. No local state, DB has completion — show completed view
+      restoreCompleted(completion.answers ?? {});
+    }
+    // 4. Nothing — stay on landing (default)
+  }, [story.id, chapters, completion]);
+
+  // Scroll to the last chapter after restore render
+  useEffect(() => {
+    if (!isRestored) return;
+    const lastIdx = revealedCount - 1;
+    requestAnimationFrame(() => {
+      chapterRefs.current[lastIdx]?.scrollIntoView({
+        behavior: "instant",
+        block: "center",
+      });
+    });
+    setIsRestored(false);
+  }, [isRestored, revealedCount]);
+
+  // ── Scroll to newly revealed chapter (runs after render, not in updater) ────
+  useEffect(() => {
+    if (phase !== "story") return;
+    if (revealedCount <= prevRevealedRef.current) {
+      prevRevealedRef.current = revealedCount;
+      return;
+    }
+    prevRevealedRef.current = revealedCount;
+
+    const showingFinal = revealedCount > chapters.length;
+    const target = showingFinal
+      ? finalRef.current
+      : chapterRefs.current[revealedCount - 1];
+
+    if (!target) return;
+    // Delay slightly so the entrance animation has started (element is in DOM
+    // at full height) before scrollIntoView calculates the position
+    const timer = setTimeout(() => {
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [revealedCount, phase, chapters.length]);
+
+  // ── Advance to next chapter or final message ────────────────────────────────
+  const advanceToNext = useCallback(() => {
+    saveProgress(story.id, { chapterIndex: revealedCount, answers });
+    setRevealedCount((prev) => prev + 1);
+  }, [revealedCount, story.id, answers]);
 
   // ── Handlers ───────────────────────────────────────────────────────────────
   const handleBegin = () => {
     setPhase("story");
   };
 
-  const handlePromptAnswer = (answer: string) => {
-    if (!chapter) return;
-    const newAnswers = { ...answers, [chapter.id]: answer };
-    setAnswers(newAnswers);
-    setChapterStates((prev) => ({
-      ...prev,
-      [chapterIndex]: { step: "revealed", answer },
-    }));
-    saveProgress(story.id, { chapterIndex, answers: newAnswers });
-  };
-
-  const handleContinue = () => {
-    if (chapterIndex < chapters.length - 1) {
-      const next = chapterIndex + 1;
-      setChapterIndex(next);
+  const handlePromptAnswer = useCallback(
+    (chapterIdx: number, chapter: Chapter, answer: string) => {
+      const newAnswers = { ...answers, [chapter.id]: answer };
+      setAnswers(newAnswers);
       setChapterStates((prev) => ({
         ...prev,
-        [next]: { step: "prompt", answer: null },
+        [chapterIdx]: { step: "revealed", answer },
       }));
-      saveProgress(story.id, { chapterIndex: next, answers });
-    } else {
-      setPhase("final");
-      clearProgress(story.id);
+      saveProgress(story.id, { chapterIndex: chapterIdx, answers: newAnswers });
+
+      // Auto-advance after answer (mc, text_input, audio, image_reveal)
+      if (
+        chapter.prompt_type === "multiple_choice" ||
+        chapter.prompt_type === "text_input" ||
+        chapter.prompt_type === "audio_playback"
+      ) {
+        advanceTimerRef.current = setTimeout(advanceToNext, AUTO_ADVANCE_DELAY);
+      }
+      if (chapter.prompt_type === "image_reveal") {
+        // onAnswer fires 1.2s after tap (image fade-in) → advance 1.5s later
+        advanceTimerRef.current = setTimeout(advanceToNext, 1500);
+      }
+    },
+    [answers, story.id, advanceToNext]
+  );
+
+  // Re-center the current chapter after its content grows (integration text, image)
+  const handleRevealAnimationComplete = useCallback(
+    (chapterIdx: number) => {
+      if (chapterIdx === revealedCount - 1) {
+        chapterRefs.current[chapterIdx]?.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+      }
+    },
+    [revealedCount]
+  );
+
+  // ── Save / Reset handlers ──────────────────────────────────────────────────
+  const handleSave = useCallback(async () => {
+    setIsSaving(true);
+    const result = await saveStoryCompletionAction(story.id, answers);
+    if (result.success) {
+      setIsSaved(true);
+      saveProgress(story.id, {
+        chapterIndex: chapters.length,
+        answers,
+        saved: true,
+      });
     }
-  };
+    setIsSaving(false);
+  }, [story.id, answers, chapters.length]);
+
+  const handleReset = useCallback(() => {
+    clearProgress(story.id);
+    setPhase("landing");
+    setRevealedCount(1);
+    prevRevealedRef.current = 1;
+    setChapterStates({});
+    setAnswers({});
+    setIsSaved(false);
+  }, [story.id]);
 
   // ── Render: Landing ────────────────────────────────────────────────────────
   if (phase === "landing") {
     return <StoryLanding story={story} onBegin={handleBegin} />;
   }
 
-  // ── Render: Final ──────────────────────────────────────────────────────────
-  if (phase === "final") {
-    return <FinalMessage story={story} />;
-  }
-
-  // ── Render: Story ──────────────────────────────────────────────────────────
-  if (!chapter) return null;
-
-  const integration =
-    state.step === "revealed" &&
-    state.answer &&
-    hasIntegration(chapter) &&
-    (chapter.prompt_type === "multiple_choice" ||
-      chapter.prompt_type === "text_input")
-      ? (chapter.prompt_config as { integration_template?: string })
-          ?.integration_template ?? null
-      : null;
+  // ── Render: Story (continuous scroll) ──────────────────────────────────────
+  const showFinal = revealedCount > chapters.length;
 
   return (
-    <div className="min-h-screen bg-background px-5 py-8">
-      {/* ── Progress ─────────────────────────────────────────── */}
-      <div className="mb-8">
-        <ProgressIndicator total={chapters.length} current={chapterIndex} />
-      </div>
+    <div
+      className="scroll-snap-y-proximity h-screen overflow-y-auto bg-background pb-[30vh]"
+    >
+      {chapters.slice(0, revealedCount).map((chapter, idx) => {
+        const state = chapterStates[idx] ?? {
+          step: "prompt" as ChapterStep,
+          answer: null,
+        };
+        const isNoneType = chapter.prompt_type === "none";
+        const isLastRevealed = idx === revealedCount - 1;
+        const integration = getIntegration(chapter, state);
+        const showChevron =
+          !isSaved &&
+          needsChevron(chapter) &&
+          (state.step === "revealed" || isNoneType) &&
+          isLastRevealed &&
+          !showFinal;
 
-      {/* ── Chapter with cross-fade transition ────────────────── */}
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={chapterIndex}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.4, ease: "easeInOut" }}
-          className="mx-auto max-w-sm space-y-6 pb-12"
-        >
-          {/* Paragraph */}
-          <ParagraphDisplay text={chapter.paragraph_text} />
-
-          {/* Prompt interaction (hidden in "revealed" step) */}
-          {state.step === "prompt" && !isNoneType && (
-            <PromptInteraction
-              chapter={chapter}
-              onAnswer={handlePromptAnswer}
-            />
-          )}
-
-          {/* Integration text (revealed step, if template exists) */}
-          {state.step === "revealed" &&
-            integration &&
-            state.answer &&
-            (chapter.prompt_type === "multiple_choice" ||
-              chapter.prompt_type === "text_input") && (
-              <IntegrationText
-                template={integration}
-                answer={state.answer}
-                promptType={chapter.prompt_type}
+        return (
+          <div
+            key={chapter.id}
+            ref={(el) => {
+              chapterRefs.current[idx] = el;
+            }}
+            className={`scroll-snap-align-center mx-auto max-w-sm px-5 ${idx === 0 ? "pt-16" : ""}`}
+          >
+            {/* ── Chapter divider (between chapters) ──────────── */}
+            {idx > 0 && (
+              <motion.div
+                initial={isSaved ? false : { scaleX: 0, opacity: 0 }}
+                animate={{ scaleX: 1, opacity: 1 }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+                className="mx-auto my-8 h-px w-16 origin-center bg-border/50"
               />
             )}
 
-          {/* Chapter image (revealed step, or always if no prompt) */}
-          {(state.step === "revealed" || isNoneType) &&
-            chapter.image_url && (
-              <ChapterImage url={chapter.image_url} />
-            )}
+            <motion.div
+              className="space-y-6"
+              initial={!isSaved && isLastRevealed ? { opacity: 0 } : false}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+            >
+              {/* Chapter title */}
+              <p className="font-serif text-xs uppercase tracking-widest text-muted-foreground">
+                {chapter.title?.trim() || `Chapter ${idx + 1}`}
+              </p>
 
-          {/* Continue button */}
-          {(state.step === "revealed" || isNoneType) && (
-            <ContinueButton
-              onClick={handleContinue}
-              label={
-                chapterIndex < chapters.length - 1
-                  ? "Continue"
-                  : "See your message"
-              }
-            />
-          )}
+              {/* Paragraph */}
+              <ParagraphDisplay text={chapter.paragraph_text} />
+
+              {/* Prompt interaction — shown in "prompt" state for all types,
+                  AND in "revealed" state for audio_playback so the player
+                  stays mounted and audio keeps playing in the background */}
+              {!isSaved && !isNoneType &&
+                (state.step === "prompt" ||
+                  chapter.prompt_type === "audio_playback") && (
+                <PromptInteraction
+                  chapter={chapter}
+                  onAnswer={(answer) =>
+                    handlePromptAnswer(idx, chapter, answer)
+                  }
+                />
+              )}
+
+              {/* Revealed image for image_reveal prompts (stays visible after answering) */}
+              {state.step === "revealed" &&
+                chapter.prompt_type === "image_reveal" &&
+                chapter.prompt_config && (
+                  <img
+                    src={
+                      (chapter.prompt_config as { image_url?: string })
+                        .image_url ?? ""
+                    }
+                    alt=""
+                    className="w-full rounded-2xl object-cover"
+                  />
+                )}
+
+              {/* Integration text (revealed step) */}
+              {state.step === "revealed" &&
+                integration &&
+                state.answer &&
+                (chapter.prompt_type === "multiple_choice" ||
+                  chapter.prompt_type === "text_input") && (
+                  <motion.div
+                    onAnimationComplete={() =>
+                      handleRevealAnimationComplete(idx)
+                    }
+                  >
+                    <IntegrationText
+                      template={integration}
+                      answer={state.answer}
+                      promptType={chapter.prompt_type}
+                    />
+                  </motion.div>
+                )}
+
+              {/* Chapter image (revealed step, or always if no prompt) */}
+              {(state.step === "revealed" || isNoneType) &&
+                chapter.image_url && (
+                  <motion.div
+                    onAnimationComplete={() =>
+                      handleRevealAnimationComplete(idx)
+                    }
+                  >
+                    <ChapterImage url={chapter.image_url} />
+                  </motion.div>
+                )}
+
+              {/* Down-arrow chevron for none/audio/image types */}
+              {showChevron && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.5, delay: 0.5 }}
+                  className="flex justify-center pt-4"
+                >
+                  <button
+                    onClick={advanceToNext}
+                    className="group flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
+                    aria-label={
+                      idx === chapters.length - 1
+                        ? "See your message"
+                        : "Continue"
+                    }
+                  >
+                    <motion.div
+                      animate={{ y: [0, 6, 0] }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                    >
+                      <ChevronDown className="h-6 w-6" />
+                    </motion.div>
+                  </button>
+                </motion.div>
+              )}
+            </motion.div>
+          </div>
+        );
+      })}
+
+      {/* ── Final message (last item in scroll) ──────────────────── */}
+      {showFinal && (
+        <motion.div
+          ref={finalRef}
+          className="scroll-snap-align-center"
+          initial={isSaved ? false : { opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+        >
+          <FinalMessage story={story} />
+
+          {/* ── Completion actions ────────────────────────────── */}
+          <div className="mx-auto max-w-xs px-6 pb-16 pt-4">
+            {!isSaved ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: 1.5 }}
+                className="space-y-3"
+              >
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="w-full rounded-xl bg-primary py-3 font-serif text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.98] disabled:opacity-60"
+                >
+                  {isSaving ? "Saving…" : "Save My Story"}
+                </button>
+                <button
+                  onClick={handleReset}
+                  className="w-full rounded-xl py-2.5 font-serif text-sm text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Reset
+                </button>
+              </motion.div>
+            ) : (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+                className="space-y-3"
+              >
+                <button
+                  onClick={() => setShowExport(true)}
+                  className="w-full rounded-xl bg-primary py-3 font-serif text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 active:scale-[0.98]"
+                >
+                  Share Your Story
+                </button>
+              </motion.div>
+            )}
+          </div>
         </motion.div>
-      </AnimatePresence>
+      )}
+
+      {/* ── Export sheet ───────────────────────────────────────── */}
+      <StoryExport
+        chapters={chapters}
+        answers={answers}
+        storyTitle={story.title}
+        open={showExport}
+        onClose={() => setShowExport(false)}
+      />
     </div>
   );
 }
-

@@ -149,3 +149,18 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ─── Recipient Scroll Experience ───────────────────────────────────────── */
+.scroll-snap-y-proximity {
+  scroll-snap-type: y proximity;
+  -webkit-overflow-scrolling: touch;
+  /* Hide scrollbar (Chrome/Safari + Firefox) */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scroll-snap-y-proximity::-webkit-scrollbar {
+  display: none;
+}
+.scroll-snap-align-center {
+  scroll-snap-align: center;
+}

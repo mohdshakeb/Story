@@ -8,6 +8,19 @@ interface StoryLandingProps {
   onBegin: () => void;
 }
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]!);
+}
+
+function occasionLabel(occasion: string, anniversaryNumber: number | null): string {
+  if (occasion === "anniversary" && anniversaryNumber) {
+    return `${ordinal(anniversaryNumber)} anniversary`;
+  }
+  return occasion.replace(/-/g, " ");
+}
+
 /**
  * The first screen the recipient sees. Staggered entrance animations reveal
  * the greeting, title, and "Begin" button in sequence.
@@ -34,7 +47,7 @@ export function StoryLanding({ story, onBegin }: StoryLandingProps) {
             }}
             className="font-serif text-sm text-muted-foreground"
           >
-            A story for {story.recipient_name}
+            Made for {story.recipient_name}
           </motion.p>
         )}
 
@@ -58,7 +71,7 @@ export function StoryLanding({ story, onBegin }: StoryLandingProps) {
             }}
             className="font-serif text-sm capitalize text-muted-foreground"
           >
-            {story.occasion.replace("-", " ")}
+            {occasionLabel(story.occasion, story.anniversary_number)}
           </motion.p>
         )}
 

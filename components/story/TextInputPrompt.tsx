@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "motion/react";
-import { ArrowRight } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { TextInputConfig } from "@/lib/types/story";
 
 interface TextInputPromptProps {
@@ -58,20 +58,26 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
       </div>
 
       {!submitted && (
-        <button
-          onClick={handleSubmit}
-          disabled={!value.trim()}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-40 active:scale-[0.98]"
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: value.trim() ? 1 : 0.3 }}
+          transition={{ duration: 0.3 }}
+          className="flex justify-center pt-1"
         >
-          Submit
-          <ArrowRight className="h-4 w-4" />
-        </button>
-      )}
-
-      {submitted && (
-        <p className="text-center font-serif text-xs text-muted-foreground">
-          ✓ Response recorded
-        </p>
+          <button
+            onClick={handleSubmit}
+            disabled={!value.trim()}
+            aria-label="Submit response"
+            className="group flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed"
+          >
+            <motion.div
+              animate={value.trim() ? { y: [0, 6, 0] } : {}}
+              transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <ChevronDown className="h-6 w-6" />
+            </motion.div>
+          </button>
+        </motion.div>
       )}
     </motion.div>
   );

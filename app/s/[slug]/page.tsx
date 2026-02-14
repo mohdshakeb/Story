@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { getStoryBySlug } from "@/lib/data/queries";
+import { getStoryBySlug, getStoryCompletionBySlug } from "@/lib/data/queries";
 import { StoryExperience } from "@/components/story/StoryExperience";
 
 interface Props {
@@ -46,5 +46,7 @@ export default async function StoryPage({ params }: Props) {
     notFound();
   }
 
-  return <StoryExperience story={story} />;
+  const completion = await getStoryCompletionBySlug(slug);
+
+  return <StoryExperience story={story} completion={completion} />;
 }

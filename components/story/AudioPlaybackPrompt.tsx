@@ -17,6 +17,7 @@ export function AudioPlaybackPrompt({
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasPlayed, setHasPlayed] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
 
   const togglePlay = () => {
     const audio = audioRef.current;
@@ -28,26 +29,23 @@ export function AudioPlaybackPrompt({
     } else {
       audio.play();
       setIsPlaying(true);
+      if (!hasStarted) {
+        setHasStarted(true);
+        // Unlock advancement as soon as the user presses play — listening fully is optional
+        onAnswer("played");
+      }
     }
   };
 
   const handleEnded = () => {
     setIsPlaying(false);
-    if (!hasPlayed) {
-      setHasPlayed(true);
-      // Give the recipient a moment to process before advancing
-      setTimeout(() => onAnswer("played"), 800);
-    }
+    setHasPlayed(true);
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, ease: "easeOut" }}
-      className="flex flex-col items-center gap-4 py-4"
-    >
-      {/* Hidden audio element */}
+    <>
+      {/* Audio element rendered as first sibling — not nested — so React never
+          unmounts it when the UI re-renders (keeps playback alive across state changes) */}
       <audio
         ref={audioRef}
         src={config.audio_url}
@@ -56,28 +54,34 @@ export function AudioPlaybackPrompt({
         onPause={() => setIsPlaying(false)}
       />
 
-      {/* Play/Pause button */}
-      <button
-        onClick={togglePlay}
-        disabled={hasPlayed && !isPlaying}
-        className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-40"
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        className="flex flex-col items-center gap-4 py-4"
       >
-        {isPlaying ? (
-          <Pause className="h-7 w-7" />
-        ) : hasPlayed ? (
-          <CheckCircle2 className="h-7 w-7" />
-        ) : (
-          <Play className="ml-0.5 h-7 w-7" />
-        )}
-      </button>
+        {/* Play/Pause button */}
+        <button
+          onClick={togglePlay}
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-all hover:bg-primary/90 active:scale-95"
+        >
+          {isPlaying ? (
+            <Pause className="h-7 w-7" />
+          ) : hasPlayed ? (
+            <CheckCircle2 className="h-7 w-7" />
+          ) : (
+            <Play className="ml-0.5 h-7 w-7" />
+          )}
+        </button>
 
-      <p className="font-serif text-sm text-muted-foreground">
-        {hasPlayed
-          ? "Listened"
-          : isPlaying
-            ? "Playing…"
-            : config.button_text || "Play to hear…"}
-      </p>
-    </motion.div>
+        <p className="font-serif text-sm text-muted-foreground">
+          {hasPlayed
+            ? "Listened"
+            : isPlaying
+              ? "Playing…"
+              : config.button_text || "Play to hear…"}
+        </p>
+      </motion.div>
+    </>
   );
 }

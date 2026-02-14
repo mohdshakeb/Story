@@ -16,7 +16,7 @@ interface FinalMessageProps {
 const container: Variants = {
   hidden: {},
   visible: {
-    transition: { staggerChildren: 0.28, delayChildren: 0.2 },
+    transition: { staggerChildren: 0.4, delayChildren: 0.3 },
   },
 };
 
@@ -71,7 +71,7 @@ export function FinalMessage({ story }: FinalMessageProps) {
 
   return (
     <motion.div
-      className="flex min-h-screen flex-col items-center justify-center px-6 py-16 text-center"
+      className="flex flex-col items-center px-6 pb-12 pt-20 text-center"
       variants={container}
       initial="hidden"
       animate="visible"

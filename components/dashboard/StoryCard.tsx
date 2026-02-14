@@ -10,6 +10,7 @@ import {
   Clock,
   Copy,
   Eye,
+  Heart,
   MoreHorizontal,
   Pencil,
   Trash2,
@@ -125,6 +126,15 @@ export function StoryCard({ story }: StoryCardProps) {
                     <Copy className="mr-2 h-4 w-4" /> Copy link
                   </DropdownMenuItem>
                 )}
+                {story.is_completed && story.slug && (
+                  <DropdownMenuItem
+                    onClick={() =>
+                      window.open(`/s/${story.slug}`, "_blank")
+                    }
+                  >
+                    <Heart className="mr-2 h-4 w-4" /> View Completed
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => setShowDeleteDialog(true)}
@@ -152,6 +162,14 @@ export function StoryCard({ story }: StoryCardProps) {
                 </>
               )}
             </Badge>
+            {story.is_completed && (
+              <Badge
+                variant="outline"
+                className="gap-1 border-green-300 text-green-700"
+              >
+                <Heart className="h-3 w-3" /> Completed
+              </Badge>
+            )}
             {story.occasion && (
               <Badge variant="outline">
                 {OCCASION_LABELS[story.occasion] ?? story.occasion}
