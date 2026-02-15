@@ -22,6 +22,13 @@ export const metadata: Metadata = {
   description: "Create interactive story experiences for your loved ones",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  interactiveWidget: "resizes-content",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

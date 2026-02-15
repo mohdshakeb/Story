@@ -41,7 +41,7 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
     if (!vv) return;
     const scrollToInput = () => {
       if (document.activeElement !== textareaRef.current) return;
-      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     };
     vv.addEventListener("resize", scrollToInput);
     return () => vv.removeEventListener("resize", scrollToInput);
@@ -51,7 +51,7 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
     // Delay matches the keyboard slide-up animation (~300ms) so we scroll
     // after the viewport has finished shrinking.
     setTimeout(() => {
-      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      containerRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     }, 300);
   };
 

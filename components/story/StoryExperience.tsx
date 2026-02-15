@@ -346,7 +346,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
   return (
     <div
       ref={scrollContainerRef}
-      className="scroll-snap-y-proximity h-screen overflow-y-auto bg-background pt-[30vh] pb-[30vh]"
+      className="scroll-snap-y-proximity h-[100dvh] overflow-y-auto bg-background pt-[30vh] pb-[30vh]"
     >
       {chapters.slice(0, revealedCount).map((chapter, idx) => {
         const state = chapterStates[idx] ?? {
@@ -397,9 +397,9 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                 text={chapter.paragraph_text}
                 inlineAppend={
                   state.step === "revealed" &&
-                  integration !== null &&
-                  !integration.hasTemplate &&
-                  chapter.prompt_type === "multiple_choice"
+                    integration !== null &&
+                    !integration.hasTemplate &&
+                    chapter.prompt_type === "multiple_choice"
                     ? { text: integration.answer }
                     : undefined
                 }
@@ -415,30 +415,30 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                     (state.step === "prompt" ||
                       chapter.prompt_type === "audio_playback" ||
                       chapter.prompt_type === "text_input") && (
-                    <motion.div
-                      key="prompt"
-                      exit={
-                        chapter.prompt_type === "multiple_choice"
-                          ? {
+                      <motion.div
+                        key="prompt"
+                        exit={
+                          chapter.prompt_type === "multiple_choice"
+                            ? {
                               opacity: 0,
                               height: 0,
                               overflow: "hidden",
                               transition: { duration: 0.35, ease: "easeInOut" },
                             }
-                          : chapter.prompt_type !== "audio_playback" &&
+                            : chapter.prompt_type !== "audio_playback" &&
                               chapter.prompt_type !== "text_input"
-                            ? { opacity: 0, transition: { duration: 0.2 } }
-                            : {}
-                      }
-                    >
-                      <PromptInteraction
-                        chapter={chapter}
-                        onAnswer={(answer) =>
-                          handlePromptAnswer(idx, chapter, answer)
+                              ? { opacity: 0, transition: { duration: 0.2 } }
+                              : {}
                         }
-                      />
-                    </motion.div>
-                  )}
+                      >
+                        <PromptInteraction
+                          chapter={chapter}
+                          onAnswer={(answer) =>
+                            handlePromptAnswer(idx, chapter, answer)
+                          }
+                        />
+                      </motion.div>
+                    )}
                 </AnimatePresence>
 
                 {/* Revealed image for image_reveal prompts (stays visible after answering) */}
