@@ -25,4 +25,4 @@ export const MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25MB
 export const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50MB
 
 export const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
-export const ACCEPTED_AUDIO_TYPES = ["audio/mpeg", "audio/mp4", "audio/m4a"];
+export const ACCEPTED_AUDIO_TYPES = ["audio/mpeg", "audio/mp4", "audio/m4a", "audio/x-m4a"];
