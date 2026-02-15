@@ -8,11 +8,17 @@ import {
 /**
  * POST /api/upload/audio
  *
- * FormData fields:
- *   file     — the audio File
- *   storyId  — UUID of the story (determines storage path)
+ * Accepts JSON metadata (no file body — avoids Vercel's 4.5MB limit).
+ * Returns a Supabase signed upload URL; the client uploads the file
+ * directly to Supabase via uploadToSignedUrl.
  *
- * Returns: { url: string, path: string }
+ * JSON body fields:
+ *   storyId     — UUID of the story (determines storage path)
+ *   filename    — original filename (used for extension)
+ *   contentType — MIME type of the file
+ *   fileSize    — file size in bytes
+ *
+ * Returns: { signedUrl: string, token: string, path: string }
  */
 export async function POST(request: NextRequest) {
   const token = request.headers.get("x-upload-token");
@@ -20,53 +26,56 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let formData: FormData;
+  let body: {
+    storyId?: string;
+    filename?: string;
+    contentType?: string;
+    fileSize?: number;
+  };
   try {
-    formData = await request.formData();
+    body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid form data" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
   }
 
-  const file = formData.get("file") as File | null;
-  const storyId = formData.get("storyId") as string | null;
+  const { storyId, filename, contentType, fileSize } = body;
 
-  if (!file || !storyId) {
+  if (!storyId || !filename || !contentType) {
     return NextResponse.json(
-      { error: "Missing required fields: file, storyId" },
+      { error: "Missing required fields: storyId, filename, contentType" },
       { status: 400 }
     );
   }
 
-  if (!ACCEPTED_AUDIO_TYPES.includes(file.type)) {
+  if (!ACCEPTED_AUDIO_TYPES.includes(contentType)) {
     return NextResponse.json(
       { error: "Invalid file type. Use MP3, MP4, or M4A." },
       { status: 400 }
     );
   }
 
-  if (file.size > MAX_AUDIO_SIZE) {
+  if (fileSize && fileSize > MAX_AUDIO_SIZE) {
     return NextResponse.json(
       { error: "File too large. Maximum 25MB." },
       { status: 400 }
     );
   }
 
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp3";
-  const filename = `audio-${Date.now()}.${ext}`;
-  const path = `${storyId}/${filename}`;
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "mp3";
+  const path = `${storyId}/audio-${Date.now()}.${ext}`;
 
   const supabase = createServiceClient();
   const { data, error } = await supabase.storage
     .from("story-audio")
-    .upload(path, file, { contentType: file.type, upsert: true });
+    .createSignedUploadUrl(path);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from("story-audio").getPublicUrl(data.path);
-
-  return NextResponse.json({ url: publicUrl, path: data.path });
+  return NextResponse.json({
+    signedUrl: data.signedUrl,
+    token: data.token,
+    path,
+  });
 }

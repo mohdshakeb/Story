@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { deleteMediaAction } from "@/actions/media-actions";
+import { createClient } from "@/lib/supabase/client";
 import {
   MAX_IMAGE_SIZE,
   MAX_AUDIO_SIZE,
@@ -82,23 +83,63 @@ export function MediaUploader({
     if (fileType) formData.append("fileType", fileType);
 
     try {
-      const endpoint = isImage ? "/api/upload/image" : "/api/upload/audio";
-      const res = await fetch(endpoint, {
-        method: "POST",
-        body: formData,
-        headers: {
-          "x-upload-token": process.env.NEXT_PUBLIC_UPLOAD_SECRET_TOKEN ?? "",
-        },
-      });
-      const data = await res.json();
+      if (isImage) {
+        // Image upload: send file through the API route (files ≤5MB, within Vercel's limit)
+        const res = await fetch("/api/upload/image", {
+          method: "POST",
+          body: formData,
+          headers: {
+            "x-upload-token": process.env.NEXT_PUBLIC_UPLOAD_SECRET_TOKEN ?? "",
+          },
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || "Upload failed");
+          setIsUploading(false);
+          return;
+        }
+        onUpload(data.url, data.path);
+      } else {
+        // Audio upload: get a signed URL from the server, then upload directly
+        // to Supabase from the browser — bypasses Vercel's 4.5MB body limit.
+        const metaRes = await fetch("/api/upload/audio", {
+          method: "POST",
+          body: JSON.stringify({
+            storyId,
+            filename: file.name,
+            contentType: file.type,
+            fileSize: file.size,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+            "x-upload-token": process.env.NEXT_PUBLIC_UPLOAD_SECRET_TOKEN ?? "",
+          },
+        });
+        const metaData = await metaRes.json();
+        if (!metaRes.ok) {
+          toast.error(metaData.error || "Upload failed");
+          setIsUploading(false);
+          return;
+        }
 
-      if (!res.ok) {
-        toast.error(data.error || "Upload failed");
-        setIsUploading(false);
-        return;
+        const supabase = createClient();
+        const { error: uploadError } = await supabase.storage
+          .from("story-audio")
+          .uploadToSignedUrl(metaData.path, metaData.token, file, {
+            contentType: file.type,
+          });
+        if (uploadError) {
+          toast.error(uploadError.message || "Upload failed");
+          setIsUploading(false);
+          return;
+        }
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("story-audio")
+          .getPublicUrl(metaData.path);
+
+        onUpload(publicUrl, metaData.path);
       }
-
-      onUpload(data.url, data.path);
       toast.success(`${isImage ? "Image" : "Audio"} uploaded`);
     } catch {
       toast.error("Upload failed. Please try again.");
