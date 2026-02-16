@@ -60,6 +60,7 @@ export async function updateChapterAction(
       background_image_url: parsed.data.background_image_url ?? null,
       prompt_type: parsed.data.prompt_type,
       prompt_config: (parsed.data.prompt_config ?? null) as PromptConfig,
+      image_position: parsed.data.image_position ?? "before_prompt",
     });
     revalidatePath(`/dashboard/story/${storyId}`);
     revalidatePath(

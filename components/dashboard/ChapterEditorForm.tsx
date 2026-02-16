@@ -19,6 +19,7 @@ import { MediaUploader } from "./MediaUploader";
 import { ChapterFormSchema, type ChapterFormData } from "@/lib/utils/validation";
 import { updateChapterAction } from "@/actions/chapter-actions";
 import type { Chapter, PromptType } from "@/lib/types/story";
+import { cn } from "@/lib/utils";
 
 const DEFAULT_CONFIGS: Record<PromptType, unknown> = {
   none: null,
@@ -68,6 +69,7 @@ export function ChapterEditorForm({
       background_image_url: chapter.background_image_url ?? "",
       prompt_type: chapter.prompt_type,
       prompt_config: chapter.prompt_config ?? DEFAULT_CONFIGS[chapter.prompt_type],
+      image_position: chapter.image_position ?? "before_prompt",
     },
   });
 
@@ -91,6 +93,7 @@ export function ChapterEditorForm({
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [isDirty]);
   const imageUrl = watch("image_url") as string | undefined;
+  const imagePosition = watch("image_position") as "before_prompt" | "after_prompt";
 
   const handlePromptTypeChange = (newType: PromptType) => {
     setValue("prompt_type", newType, { shouldDirty: true });
@@ -195,9 +198,34 @@ export function ChapterEditorForm({
                 }
               />
               <p className="mt-2 text-xs text-muted-foreground">
-                Shown after the prompt interaction. Revealed as a visual moment
-                in the story flow.
+                Decorative image for this chapter.
               </p>
+              {imageUrl && promptType !== "none" && (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs font-medium text-foreground">
+                    Image position
+                  </p>
+                  <div className="flex gap-2">
+                    {(["before_prompt", "after_prompt"] as const).map((pos) => (
+                      <button
+                        key={pos}
+                        type="button"
+                        onClick={() =>
+                          setValue("image_position", pos, { shouldDirty: true })
+                        }
+                        className={cn(
+                          "flex-1 rounded-lg border px-3 py-2 text-xs transition-colors",
+                          imagePosition === pos
+                            ? "border-primary bg-primary/10 text-primary font-medium"
+                            : "border-border text-muted-foreground hover:border-foreground/40"
+                        )}
+                      >
+                        {pos === "before_prompt" ? "Before prompt" : "After interaction"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

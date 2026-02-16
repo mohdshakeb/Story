@@ -8,11 +8,13 @@ import type { MultipleChoiceConfig } from "@/lib/types/story";
 interface MultipleChoicePromptProps {
   config: MultipleChoiceConfig;
   onAnswer: (answer: string) => void;
+  faded?: boolean;
 }
 
 export function MultipleChoicePrompt({
   config,
   onAnswer,
+  faded,
 }: MultipleChoicePromptProps) {
   const [selected, setSelected] = useState<string | null>(null);
 
@@ -25,9 +27,10 @@ export function MultipleChoicePrompt({
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
+      animate={{ opacity: faded ? 0 : 1, y: 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
       className="space-y-4"
+      style={faded ? { pointerEvents: "none" } : undefined}
     >
       {config.question && (
         <p className="font-serif text-sm font-medium text-foreground">

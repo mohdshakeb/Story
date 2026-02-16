@@ -7,11 +7,13 @@ import { StoryLanding } from "./StoryLanding";
 import { ParagraphDisplay } from "./ParagraphDisplay";
 import { ViewerVoiceText } from "./ViewerVoiceText";
 import { PromptInteraction } from "./PromptInteraction";
+import { MultipleChoicePrompt } from "./MultipleChoicePrompt";
+import { ImageRevealPrompt } from "./ImageRevealPrompt";
 import { ChapterImage } from "./ChapterImage";
 import { FinalMessage } from "./FinalMessage";
 import { StoryExport } from "./StoryExport";
 import { saveStoryCompletionAction } from "@/actions/story-actions";
-import type { Story, Chapter, StoryCompletion } from "@/lib/types/story";
+import type { Story, Chapter, StoryCompletion, MultipleChoiceConfig, ImageRevealConfig } from "@/lib/types/story";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -171,6 +173,9 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isRestored, setIsRestored] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  // Pre-calculated rendered heights for MC after_prompt images (chapter index → px).
+  // Computed on mount so the container is already the right size before the user answers.
+  const [mcAfterPromptHeights, setMcAfterPromptHeights] = useState<Record<number, number>>({});
 
   // ── Refs ────────────────────────────────────────────────────────────────────
   const chapterRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -185,6 +190,37 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
     return () => {
       if (advanceTimerRef.current) clearTimeout(advanceTimerRef.current);
     };
+  }, []);
+
+  // ── Pre-load after_prompt images for MC chapters ─────────────────────────────
+  // inner width of max-w-sm (384px) minus px-5 padding (2×20px) = 344px
+  const MC_INNER_WIDTH = 344;
+  useEffect(() => {
+    const heights: Record<number, number> = {};
+    let pending = 0;
+    chapters.forEach((chapter, idx) => {
+      if (
+        chapter.prompt_type === "multiple_choice" &&
+        chapter.image_url &&
+        (chapter.image_position ?? "before_prompt") === "after_prompt"
+      ) {
+        pending++;
+        const img = new window.Image();
+        img.onload = () => {
+          if (img.naturalWidth && img.naturalHeight) {
+            heights[idx] = Math.round(MC_INNER_WIDTH * img.naturalHeight / img.naturalWidth);
+          }
+          pending--;
+          if (pending === 0) setMcAfterPromptHeights(heights);
+        };
+        img.onerror = () => {
+          pending--;
+          if (pending === 0) setMcAfterPromptHeights(heights);
+        };
+        img.src = chapter.image_url;
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ── Restore progress (priority: localStorage.saved → inProgress → DB → landing)
@@ -359,7 +395,6 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
         const showChevron =
           !isSaved &&
           needsChevron(chapter) &&
-          (state.step === "revealed" || isNoneType) &&
           isLastRevealed &&
           !showFinal;
 
@@ -405,30 +440,96 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                 }
               />
 
+              {/* Chapter image — before prompt (default) */}
+              {chapter.image_url &&
+                (chapter.prompt_type === "none" ||
+                  (chapter.image_position ?? "before_prompt") === "before_prompt") && (
+                  <ChapterImage
+                    url={chapter.image_url}
+                    delay={isLastRevealed && !isSaved ? 0.4 : 0}
+                  />
+                )}
+
               {/* Prompt interaction — shown in "prompt" state for all types,
                   AND in "revealed" state for audio_playback/text_input so
                   they stay mounted. No layout animation — AnimatePresence
                   handles opacity transitions; height changes are instant. */}
+              <motion.div
+                initial={isLastRevealed && !isSaved ? { opacity: 0 } : false}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5, delay: isLastRevealed && !isSaved ? 0.8 : 0 }}
+              >
               <div>
+                {/* MULTIPLE CHOICE: overlay crossfade. Options stay in DOM at opacity 0
+                    (preserving chapter height). Integration text / after_prompt image
+                    overlays via position:absolute — no height change, no snap jump. */}
+                {!isSaved && chapter.prompt_type === "multiple_choice" && chapter.prompt_config && (
+                  <div
+                    className="relative overflow-hidden"
+                    style={mcAfterPromptHeights[idx] ? { minHeight: mcAfterPromptHeights[idx] } : undefined}
+                  >
+                    <MultipleChoicePrompt
+                      config={chapter.prompt_config as MultipleChoiceConfig}
+                      onAnswer={(answer) => handlePromptAnswer(idx, chapter, answer)}
+                      faded={state.step === "revealed"}
+                    />
+                    <AnimatePresence>
+                      {state.step === "revealed" && (
+                        <motion.div
+                          key="mc-overlay"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+                          className="absolute inset-0 flex items-center"
+                        >
+                          {integration?.hasTemplate && (
+                            <ViewerVoiceText
+                              text={integration.text}
+                              highlightSubstring={integration.answer}
+                            />
+                          )}
+                          {!integration?.hasTemplate &&
+                            chapter.image_url &&
+                            (chapter.image_position ?? "before_prompt") === "after_prompt" && (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={chapter.image_url}
+                                alt=""
+                                className="h-full w-full rounded-2xl object-cover"
+                              />
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+
+                {/* IMAGE REVEAL: 3D flip, rendered for both interactive + saved/restored state.
+                    initialRevealed starts it in the flipped (image) position when step=revealed. */}
+                {chapter.prompt_type === "image_reveal" && chapter.prompt_config && (
+                  <ImageRevealPrompt
+                    config={chapter.prompt_config as ImageRevealConfig}
+                    onAnswer={(answer) => handlePromptAnswer(idx, chapter, answer)}
+                    initialRevealed={state.step === "revealed"}
+                  />
+                )}
+
+                {/* ALL OTHER TYPES (text_input, audio_playback): AnimatePresence unchanged.
+                    MC and image_reveal are handled above and excluded here. */}
                 <AnimatePresence>
                   {!isSaved && !isNoneType &&
+                    chapter.prompt_type !== "multiple_choice" &&
+                    chapter.prompt_type !== "image_reveal" &&
                     (state.step === "prompt" ||
                       chapter.prompt_type === "audio_playback" ||
                       chapter.prompt_type === "text_input") && (
                       <motion.div
                         key="prompt"
                         exit={
-                          chapter.prompt_type === "multiple_choice"
-                            ? {
-                              opacity: 0,
-                              height: 0,
-                              overflow: "hidden",
-                              transition: { duration: 0.35, ease: "easeInOut" },
-                            }
-                            : chapter.prompt_type !== "audio_playback" &&
-                              chapter.prompt_type !== "text_input"
-                              ? { opacity: 0, transition: { duration: 0.2 } }
-                              : {}
+                          chapter.prompt_type !== "audio_playback" &&
+                          chapter.prompt_type !== "text_input"
+                            ? { opacity: 0, transition: { duration: 0.2 } }
+                            : {}
                         }
                       >
                         <PromptInteraction
@@ -441,47 +542,24 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                     )}
                 </AnimatePresence>
 
-                {/* Revealed image for image_reveal prompts (stays visible after answering) */}
-                {state.step === "revealed" &&
-                  chapter.prompt_type === "image_reveal" &&
-                  chapter.prompt_config && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={
-                        (chapter.prompt_config as { image_url?: string })
-                          .image_url ?? ""
-                      }
-                      alt=""
-                      className="w-full rounded-2xl object-cover"
-                    />
-                  )}
-
-                {/* text_input answer: stays visible in the mounted TextInputPrompt above */}
-
-                {/* MC + template: sentence with highlighted choice */}
-                {state.step === "revealed" &&
-                  integration?.hasTemplate === true &&
-                  chapter.prompt_type === "multiple_choice" && (
-                    <ViewerVoiceText
-                      text={integration.text}
-                      highlightSubstring={integration.answer}
-                    />
-                  )}
-                {/* MC no template: handled inline by ParagraphDisplay above */}
-              </div>
-
-              {/* Chapter image (revealed step, or always if no prompt) */}
-              {(state.step === "revealed" || isNoneType) &&
-                chapter.image_url && (
+                {/* After_prompt image — non-MC, non-none chapters only.
+                    MC after_prompt image is handled in the MC overlay above. */}
+                {chapter.image_url &&
+                  chapter.prompt_type !== "none" &&
+                  chapter.prompt_type !== "multiple_choice" &&
+                  (chapter.image_position ?? "before_prompt") === "after_prompt" &&
+                  state.step === "revealed" && (
                   <ChapterImage url={chapter.image_url} />
                 )}
+              </div>
+              </motion.div>
 
               {/* Down-arrow chevron for none/audio/image types */}
               {showChevron && (
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ duration: 0.5, delay: 0.5 }}
+                  transition={{ duration: 0.5, delay: 1.0 }}
                   className="flex justify-center pt-4"
                 >
                   <button

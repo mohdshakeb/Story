@@ -70,6 +70,7 @@ export interface Chapter {
   background_image_url: string | null;
   prompt_type: PromptType;
   prompt_config: PromptConfig;
+  image_position: "before_prompt" | "after_prompt";
   created_at: string;
   updated_at: string;
 }
@@ -108,6 +109,7 @@ export interface UpdateChapterInput {
   background_image_url?: string | null;
   prompt_type?: PromptType;
   prompt_config?: PromptConfig;
+  image_position?: "before_prompt" | "after_prompt";
 }
 
 // ─── Derived / View Types ─────────────────────────────────────────────────────

@@ -89,6 +89,7 @@ export const ChapterFormSchema = z
       "none",
     ]),
     prompt_config: z.unknown().nullable().optional(),
+    image_position: z.enum(["before_prompt", "after_prompt"]).optional(),
   })
   .superRefine((data, ctx) => {
     if (data.prompt_type === "multiple_choice") {

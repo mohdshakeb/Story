@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 interface ChapterImageProps {
   url: string;
   alt?: string;
+  delay?: number;
 }
 
 /**
@@ -13,7 +14,7 @@ interface ChapterImageProps {
  * Preloads the image to set aspect-ratio on the container,
  * preventing layout jump when the image fades in.
  */
-export function ChapterImage({ url, alt = "Chapter image" }: ChapterImageProps) {
+export function ChapterImage({ url, alt = "Chapter image", delay = 0 }: ChapterImageProps) {
   const [aspectRatio, setAspectRatio] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export function ChapterImage({ url, alt = "Chapter image" }: ChapterImageProps) 
     <motion.div
       initial={{ opacity: 0, scale: 0.97 }}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.7, ease: "easeOut" }}
+      transition={{ duration: 0.7, ease: "easeOut", delay }}
       className="overflow-hidden rounded-2xl"
       style={aspectRatio ? { aspectRatio } : undefined}
     >
