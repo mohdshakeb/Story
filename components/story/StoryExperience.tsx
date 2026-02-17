@@ -107,7 +107,7 @@ const AUTO_ADVANCE_DELAY = 800;
 
 // ─── Scroll utility ───────────────────────────────────────────────────────────
 
-function smoothScrollToCenter(
+function smoothScrollToTop(
   container: HTMLElement,
   target: HTMLElement,
   duration: number,
@@ -117,10 +117,8 @@ function smoothScrollToCenter(
 
   const containerRect = container.getBoundingClientRect();
   const targetRect = target.getBoundingClientRect();
-  const scrollDelta =
-    targetRect.top - containerRect.top +
-    targetRect.height / 2 -
-    containerRect.height / 2;
+  // Align the target's top to the container's top (+ 24px breathing room)
+  const scrollDelta = targetRect.top - containerRect.top - 24;
 
   const startScroll = container.scrollTop;
   const startTime = performance.now();
@@ -279,7 +277,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
     requestAnimationFrame(() => {
       chapterRefs.current[lastIdx]?.scrollIntoView({
         behavior: "instant",
-        block: "center",
+        block: "start",
       });
     });
     setIsRestored(false);
@@ -304,7 +302,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
     // at full height) before scrollIntoView calculates the position
     const timer = setTimeout(() => {
       const container = scrollContainerRef.current;
-      if (container) smoothScrollToCenter(container, target, 700, scrollRafRef);
+      if (container) smoothScrollToTop(container, target, 700, scrollRafRef);
     }, 50);
     return () => clearTimeout(timer);
   }, [revealedCount, phase, chapters.length]);
@@ -382,7 +380,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
   return (
     <div
       ref={scrollContainerRef}
-      className="scroll-snap-y-proximity h-[100dvh] overflow-y-auto bg-background pt-[30vh] pb-[30vh]"
+      className="scroll-snap-y-proximity h-[100dvh] overflow-y-auto bg-background pt-8 pb-[30vh]"
     >
       {chapters.slice(0, revealedCount).map((chapter, idx) => {
         const state = chapterStates[idx] ?? {
@@ -404,7 +402,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
             ref={(el) => {
               chapterRefs.current[idx] = el;
             }}
-            className="scroll-snap-align-center mx-auto max-w-sm px-5"
+            className="scroll-snap-align-start mx-auto max-w-sm px-5"
           >
             {/* ── Chapter divider (between chapters) ──────────── */}
             {idx > 0 && (
@@ -593,7 +591,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
       {showFinal && (
         <motion.div
           ref={finalRef}
-          className="scroll-snap-align-center"
+          className="scroll-snap-align-start"
           initial={isSaved ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ duration: 0.8, ease: "easeOut" }}
