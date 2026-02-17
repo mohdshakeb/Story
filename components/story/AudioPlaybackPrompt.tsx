@@ -27,6 +27,10 @@ export function AudioPlaybackPrompt({
       audio.pause();
       setIsPlaying(false);
     } else {
+      // Stop any other audio elements currently playing in the page
+      document.querySelectorAll("audio").forEach((el) => {
+        if (el !== audio && !el.paused) el.pause();
+      });
       audio.play();
       setIsPlaying(true);
       if (!hasStarted) {
