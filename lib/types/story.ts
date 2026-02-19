@@ -54,6 +54,7 @@ export interface Story {
   final_message_type: FinalMessageType | null;
   final_message_content: string | null;
   final_message_media_url: string | null;
+  og_image_url: string | null;
   published: boolean;
   created_at: string;
   updated_at: string;
@@ -92,6 +93,7 @@ export interface UpdateStoryInput {
   final_message_type?: FinalMessageType | null;
   final_message_content?: string | null;
   final_message_media_url?: string | null;
+  og_image_url?: string | null;
 }
 
 export interface CreateChapterInput {

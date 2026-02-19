@@ -66,6 +66,7 @@ export const UpdateStorySchema = z.object({
     .optional(),
   final_message_content: z.string().nullable().optional(),
   final_message_media_url: z.string().url().nullable().optional(),
+  og_image_url: z.string().url().nullable().optional(),
 });
 
 // ─── Chapter Schema ──────────────────────────────────────────────────────────

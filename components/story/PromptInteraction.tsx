@@ -9,6 +9,7 @@ import type { Chapter } from "@/lib/types/story";
 interface PromptInteractionProps {
   chapter: Chapter;
   onAnswer: (answer: string) => void;
+  onReAnswer?: (answer: string) => void;
 }
 
 /**
@@ -21,6 +22,7 @@ interface PromptInteractionProps {
 export function PromptInteraction({
   chapter,
   onAnswer,
+  onReAnswer,
 }: PromptInteractionProps) {
   const { prompt_type, prompt_config } = chapter;
 
@@ -38,6 +40,7 @@ export function PromptInteraction({
       <TextInputPrompt
         config={prompt_config as import("@/lib/types/story").TextInputConfig}
         onAnswer={onAnswer}
+        onReAnswer={onReAnswer}
       />
     );
   }

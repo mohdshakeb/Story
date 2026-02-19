@@ -344,6 +344,20 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
     [answers, story.id, advanceToNext]
   );
 
+  // ── Re-answer: update a previously submitted text_input answer ───────────
+  const handleReAnswer = useCallback(
+    (chapterIdx: number, chapter: Chapter, newAnswer: string) => {
+      const newAnswers = { ...answers, [chapter.id]: newAnswer };
+      setAnswers(newAnswers);
+      setChapterStates((prev) => ({
+        ...prev,
+        [chapterIdx]: { step: "revealed", answer: newAnswer },
+      }));
+      saveProgress(story.id, { chapterIndex: revealedCount, answers: newAnswers });
+    },
+    [answers, story.id, revealedCount]
+  );
+
   // ── Save / Reset handlers ──────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     setIsSaving(true);
@@ -534,6 +548,9 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                           chapter={chapter}
                           onAnswer={(answer) =>
                             handlePromptAnswer(idx, chapter, answer)
+                          }
+                          onReAnswer={(answer) =>
+                            handleReAnswer(idx, chapter, answer)
                           }
                         />
                       </motion.div>

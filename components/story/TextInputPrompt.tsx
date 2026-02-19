@@ -8,6 +8,7 @@ import type { TextInputConfig } from "@/lib/types/story";
 interface TextInputPromptProps {
   config: TextInputConfig;
   onAnswer: (answer: string) => void;
+  onReAnswer?: (newAnswer: string) => void;
 }
 
 /**
@@ -16,9 +17,12 @@ interface TextInputPromptProps {
  * Uses a transparent <textarea> over a styled mirror div for native input.
  * After submit, the DOM stays identical — textarea just becomes disabled.
  */
-export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
+export function TextInputPrompt({ config, onAnswer, onReAnswer }: TextInputPromptProps) {
   const [value, setValue] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [originalAnswer, setOriginalAnswer] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -31,6 +35,14 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
     const mirror = mirrorRef.current;
     if (!ta || !mirror) return;
     ta.style.height = mirror.offsetHeight + "px";
+  }, [value]);
+
+  // Debounce: hide chevron while actively typing, show after 500ms pause
+  useEffect(() => {
+    if (!value) { setIsTyping(false); return; }
+    setIsTyping(true);
+    const t = setTimeout(() => setIsTyping(false), 500);
+    return () => clearTimeout(t);
   }, [value]);
 
   // Keep textarea + chevron visible above the soft keyboard on mobile.
@@ -48,6 +60,12 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
   }, []);
 
   const handleFocus = () => {
+    // If tapping a submitted answer, enter re-edit mode.
+    // This fires natively from the user's tap — no programmatic focus needed.
+    if (submitted && !editing) {
+      setEditing(true);
+      setOriginalAnswer(value);
+    }
     // Delay matches the keyboard slide-up animation (~300ms) so we scroll
     // after the viewport has finished shrinking.
     setTimeout(() => {
@@ -68,6 +86,18 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
     }
   };
 
+  const handleBlur = () => {
+    if (!editing) return;
+    setEditing(false);
+    const trimmed = value.trim();
+    if (!trimmed) {
+      // Don't allow clearing — revert to original answer
+      setValue(originalAnswer ?? "");
+    } else if (trimmed !== originalAnswer && onReAnswer) {
+      onReAnswer(trimmed);
+    }
+  };
+
   const placeholder = config.placeholder || "Write here…";
 
   return (
@@ -85,8 +115,12 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
       )}
 
       {/* Same DOM structure before and after submit — no branching.
-          After submit the textarea is just disabled; mirror keeps showing the text. */}
-      <div className="relative">
+          After submit the textarea is just disabled (or re-enabled during editing).
+          Tapping the wrapper when submitted starts re-edit mode. */}
+      <div
+        className="relative"
+        style={{ cursor: submitted && !editing ? "text" : "default" }}
+      >
         {/* Mirror div: renders the styled text or placeholder */}
         <div
           ref={mirrorRef}
@@ -108,11 +142,12 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
           ref={textareaRef}
           value={value}
           onChange={(e) => {
-            if (!submitted) setValue(e.target.value.slice(0, maxLen));
+            if (!submitted || editing) setValue(e.target.value.slice(0, maxLen));
           }}
           onFocus={handleFocus}
+          onBlur={handleBlur}
           onKeyDown={handleKeyDown}
-          disabled={submitted}
+          readOnly={submitted && !editing}
           rows={1}
           className="absolute inset-0 m-0 w-full resize-none border-none bg-transparent p-0 font-serif text-base leading-relaxed outline-none"
           style={{
@@ -124,11 +159,12 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
         />
       </div>
 
+      {/* Chevron: visible only when there's text, not yet submitted, and typing has paused */}
       <motion.div
-        animate={{ opacity: hasText && !submitted ? 1 : 0 }}
+        animate={{ opacity: hasText && !submitted && !isTyping ? 1 : 0 }}
         transition={{ duration: 0.3 }}
         className="flex justify-center pt-3"
-        style={{ pointerEvents: hasText && !submitted ? "auto" : "none" }}
+        style={{ pointerEvents: hasText && !submitted && !isTyping ? "auto" : "none" }}
       >
         <button
           onClick={handleSubmit}
@@ -136,9 +172,9 @@ export function TextInputPrompt({ config, onAnswer }: TextInputPromptProps) {
           className="group flex h-10 w-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
         >
           <motion.div
-            animate={hasText && !submitted ? { y: [0, 6, 0] } : {}}
+            animate={hasText && !submitted && !isTyping ? { y: [0, 6, 0] } : {}}
             transition={
-              hasText && !submitted
+              hasText && !submitted && !isTyping
                 ? { duration: 2, repeat: Infinity, ease: "easeInOut" }
                 : {}
             }

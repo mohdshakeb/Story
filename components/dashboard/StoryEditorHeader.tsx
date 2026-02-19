@@ -12,6 +12,7 @@ import {
   Eye,
   Globe,
   GlobeLock,
+  Image as ImageIcon,
   Loader2,
   MessageSquarePlus,
 } from "lucide-react";
@@ -92,6 +93,13 @@ export function StoryEditorHeader({ story, chapters }: StoryEditorHeaderProps) {
               <Link href={`/dashboard/story/${story.id}/final-message`}>
                 <MessageSquarePlus className="mr-1.5 h-4 w-4" />
                 Final Message
+              </Link>
+            </Button>
+
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/dashboard/story/${story.id}/og-image`}>
+                <ImageIcon className="mr-1.5 h-4 w-4" />
+                Link Preview
               </Link>
             </Button>
 
