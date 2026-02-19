@@ -25,7 +25,25 @@ async function loadImageAsDataURL(url: string): Promise<string | null> {
   }
 }
 
+const fallbackImage = (
+  <div
+    style={{
+      width: "100%",
+      height: "100%",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "linear-gradient(135deg, #7f1d1d 0%, #881337 100%)",
+    }}
+  >
+    <span style={{ fontSize: 56, color: "#fff", fontWeight: 700 }}>
+      OurStory
+    </span>
+  </div>
+);
+
 export default async function OGImage({ params }: Props) {
+  try {
   const { slug } = await params;
   const story = await getStoryBySlug(slug);
 
@@ -217,4 +235,7 @@ export default async function OGImage({ params }: Props) {
     </div>,
     { ...size }
   );
+  } catch {
+    return new ImageResponse(fallbackImage, { ...size });
+  }
 }

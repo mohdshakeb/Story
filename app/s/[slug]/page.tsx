@@ -24,6 +24,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ? `A story for ${story.recipient_name}`
     : story.title;
 
+  // Use static Supabase CDN URL if available (fast, no cold start for WhatsApp crawler).
+  // Falls back to the dynamic opengraph-image route when og_image_url is not set.
+  const ogImageUrl = story.og_image_url ?? `/s/${slug}/opengraph-image`;
+
   return {
     title,
     description: `An interactive story: ${story.title}`,
@@ -31,6 +35,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       title,
       description: `An interactive story: ${story.title}`,
       type: "website",
+      url: `/s/${slug}`,
+      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: title }],
     },
   };
 }
