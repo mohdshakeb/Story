@@ -10,6 +10,7 @@ interface PromptInteractionProps {
   chapter: Chapter;
   onAnswer: (answer: string) => void;
   onReAnswer?: (answer: string) => void;
+  initialAnswer?: string | null;
 }
 
 /**
@@ -23,6 +24,7 @@ export function PromptInteraction({
   chapter,
   onAnswer,
   onReAnswer,
+  initialAnswer,
 }: PromptInteractionProps) {
   const { prompt_type, prompt_config } = chapter;
 
@@ -41,6 +43,7 @@ export function PromptInteraction({
         config={prompt_config as import("@/lib/types/story").TextInputConfig}
         onAnswer={onAnswer}
         onReAnswer={onReAnswer}
+        initialAnswer={initialAnswer}
       />
     );
   }
@@ -50,6 +53,7 @@ export function PromptInteraction({
       <AudioPlaybackPrompt
         config={prompt_config as import("@/lib/types/story").AudioPlaybackConfig}
         onAnswer={onAnswer}
+        initialAnswer={initialAnswer}
       />
     );
   }

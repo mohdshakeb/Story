@@ -552,6 +552,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                           onReAnswer={(answer) =>
                             handleReAnswer(idx, chapter, answer)
                           }
+                          initialAnswer={state.answer}
                         />
                       </motion.div>
                     )}
