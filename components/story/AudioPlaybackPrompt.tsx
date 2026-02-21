@@ -8,16 +8,18 @@ import type { AudioPlaybackConfig } from "@/lib/types/story";
 interface AudioPlaybackPromptProps {
   config: AudioPlaybackConfig;
   onAnswer: (answer: string) => void;
+  initialAnswer?: string | null;
 }
 
 export function AudioPlaybackPrompt({
   config,
   onAnswer,
+  initialAnswer,
 }: AudioPlaybackPromptProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [hasPlayed, setHasPlayed] = useState(false);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [hasPlayed, setHasPlayed] = useState(!!initialAnswer);
+  const [hasStarted, setHasStarted] = useState(!!initialAnswer);
 
   const togglePlay = () => {
     const audio = audioRef.current;

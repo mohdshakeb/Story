@@ -9,6 +9,7 @@ interface TextInputPromptProps {
   config: TextInputConfig;
   onAnswer: (answer: string) => void;
   onReAnswer?: (newAnswer: string) => void;
+  initialAnswer?: string | null;
 }
 
 /**
@@ -17,9 +18,9 @@ interface TextInputPromptProps {
  * Uses a transparent <textarea> over a styled mirror div for native input.
  * After submit, the DOM stays identical — textarea just becomes disabled.
  */
-export function TextInputPrompt({ config, onAnswer, onReAnswer }: TextInputPromptProps) {
-  const [value, setValue] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+export function TextInputPrompt({ config, onAnswer, onReAnswer, initialAnswer }: TextInputPromptProps) {
+  const [value, setValue] = useState(initialAnswer ?? "");
+  const [submitted, setSubmitted] = useState(!!initialAnswer);
   const [isTyping, setIsTyping] = useState(false);
   const [editing, setEditing] = useState(false);
   const [originalAnswer, setOriginalAnswer] = useState<string | null>(null);
