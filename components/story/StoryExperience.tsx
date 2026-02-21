@@ -475,7 +475,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                 {/* MULTIPLE CHOICE: overlay crossfade. Options stay in DOM at opacity 0
                     (preserving chapter height). Integration text / after_prompt image
                     overlays via position:absolute — no height change, no snap jump. */}
-                {!isSaved && chapter.prompt_type === "multiple_choice" && chapter.prompt_config && (
+                {chapter.prompt_type === "multiple_choice" && chapter.prompt_config && (
                   <div
                     className="relative overflow-hidden"
                     style={mcAfterPromptHeights[idx] ? { minHeight: mcAfterPromptHeights[idx] } : undefined}
@@ -489,7 +489,7 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                       {state.step === "revealed" && (
                         <motion.div
                           key="mc-overlay"
-                          initial={{ opacity: 0 }}
+                          initial={isSaved ? false : { opacity: 0 }}
                           animate={{ opacity: 1 }}
                           transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
                           className="absolute inset-0 flex items-center"
@@ -526,10 +526,10 @@ export function StoryExperience({ story, completion }: StoryExperienceProps) {
                   />
                 )}
 
-                {/* ALL OTHER TYPES (text_input, audio_playback): AnimatePresence unchanged.
+                {/* ALL OTHER TYPES (text_input, audio_playback): Stay mounted in revealed state.
                     MC and image_reveal are handled above and excluded here. */}
                 <AnimatePresence>
-                  {!isSaved && !isNoneType &&
+                  {!isNoneType &&
                     chapter.prompt_type !== "multiple_choice" &&
                     chapter.prompt_type !== "image_reveal" &&
                     (state.step === "prompt" ||
